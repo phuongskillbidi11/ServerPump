@@ -1,6 +1,3 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
@@ -134,3 +131,6 @@ All endpoints return JSON. Server runs on `http://localhost:8080`.
 
 
  sudo systemctl status mosquitto
+ curl -X POST http://localhost:8080/api/pump/feedback   -H "Content-Type: application/json"   -d '{"pump_id":1,"status":1}'
+
+ sqlitebrowser /var/lib/pump_server/pump.db

@@ -29,10 +29,9 @@ char* handle_pump_control(const char *payload) {
     pthread_mutex_lock(&lock);
     static char response[1024];
     snprintf(response, sizeof(response),
-             "{\"status\":\"sent\",\"current_state\":{\"pump1\":%d,\"pump2\":%d,\"pump3\":%d,\"timestamp\":%ld}}",
+             "{\"status\":\"sent\",\"current_state\":{\"pump1\":%d,\"pump2\":%d,\"timestamp\":%ld}}",
              current_pump_status.pump1,
              current_pump_status.pump2,
-             current_pump_status.pump3,
              current_pump_status.timestamp);
     pthread_mutex_unlock(&lock);
     
@@ -65,17 +64,43 @@ int handle_pump_feedback(const char *payload) {
     json_object_put(parsed);
     return 400;
 }
-
+// GET /api/gateway/status - Kiểm tra gateway hardware
+char* handle_gateway_status() {
+    pthread_mutex_lock(&lock);
+    
+    time_t now = time(NULL);
+    long seconds_since_last_seen = now - gateway_hw_status.last_seen_at;
+    
+    // Nếu > 30s không nhận heartbeat → OFFLINE
+    int is_online = (seconds_since_last_seen < 30) && gateway_hw_status.is_online;
+    
+    static char response[1024];
+    snprintf(response, sizeof(response),
+             "{"
+             "\"status\":%d,"                  
+             "\"device_id\":\"%s\","
+             "\"firmware\":\"%s\","
+             "\"last_seen\":%ld,"
+             "\"seconds_since_last_seen\":%ld"
+             "}",
+             is_online ? 1 : 0,                  
+             gateway_hw_status.device_id,
+             gateway_hw_status.firmware_version,
+             gateway_hw_status.last_seen_at,
+             seconds_since_last_seen);
+    
+    pthread_mutex_unlock(&lock);
+    return strdup(response);
+}
 // GET /api/pump/status
 char* handle_pump_status() {
     pthread_mutex_lock(&lock);
     
     static char response[512];
     snprintf(response, sizeof(response),
-             "{\"pump1\":%d,\"pump1_status\":%d,\"pump2\":%d,\"pump2_status\":%d,\"pump3\":%d,\"pump3_status\":%d,\"timestamp\":%ld}",
+             "{\"pump1\":%d,\"pump1_status\":%d,\"pump2\":%d,\"pump2_status\":%d,\"timestamp\":%ld}",
              current_pump_status.pump1, current_pump_status.pump1_status,
              current_pump_status.pump2, current_pump_status.pump2_status,
-             current_pump_status.pump3, current_pump_status.pump3_status,
              current_pump_status.timestamp);
     
     pthread_mutex_unlock(&lock);
@@ -99,11 +124,11 @@ char* handle_pump_history() {
         PumpStatus *item = &pump_history.items[idx];
         
         written = snprintf(ptr, remaining,
-                          "%s{\"pump1\":%d,\"pump1_status\":%d,\"pump2\":%d,\"pump2_status\":%d,\"pump3\":%d,\"pump3_status\":%d,\"timestamp\":%ld}",
+                          "%s{\"pump1\":%d,\"pump1_status\":%d,\"pump2\":%d,\"pump2_status\":%d,\"timestamp\":%ld}",
                           (i > 0 ? "," : ""),
                           item->pump1, item->pump1_status,
                           item->pump2, item->pump2_status,
-                          item->pump3, item->pump3_status,
+                        //   item->pump3, item->pump3_status,
                           item->timestamp);
         ptr += written;
         remaining -= written;
@@ -114,18 +139,30 @@ char* handle_pump_history() {
     
     return strdup(response);
 }
-
 static enum MHD_Result handle_request(void *cls, struct MHD_Connection *connection,
                                       const char *url, const char *method,
                                       const char *version, const char *upload_data,
                                       size_t *upload_data_size, void **con_cls) {
     
     printf("[DEBUG] Request: %s %s\n", method, url);
-    printf("[DEBUG] Upload size: %zu\n", *upload_data_size);
     
     struct MHD_Response *response;
     char *response_data = NULL;
     int status_code = 200;
+    
+    // Handle OPTIONS (CORS preflight)
+    if (strcmp(method, "OPTIONS") == 0) {
+        response_data = strdup("");
+        response = MHD_create_response_from_buffer(0, response_data, MHD_RESPMEM_MUST_FREE);
+        MHD_add_response_header(response, "Access-Control-Allow-Origin", "*");
+        MHD_add_response_header(response, "Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        MHD_add_response_header(response, "Access-Control-Allow-Headers", "Content-Type");
+        MHD_add_response_header(response, "Access-Control-Max-Age", "86400");
+        
+        enum MHD_Result ret = MHD_queue_response(connection, 204, response);
+        MHD_destroy_response(response);
+        return ret;
+    }
     
     // Handle POST data
     if (strcmp(method, "POST") == 0) {
@@ -134,7 +171,6 @@ static enum MHD_Result handle_request(void *cls, struct MHD_Connection *connecti
             if (!post_buffer) return MHD_NO;
             post_buffer[0] = '\0';
             *con_cls = post_buffer;
-            printf("[DEBUG] POST init\n");
             return MHD_YES;
         }
         
@@ -142,14 +178,12 @@ static enum MHD_Result handle_request(void *cls, struct MHD_Connection *connecti
         
         if (*upload_data_size != 0) {
             strncat(post_buffer, upload_data, *upload_data_size);
-            printf("[DEBUG] POST data chunk: %s\n", upload_data);
             *upload_data_size = 0;
             return MHD_YES;
         }
         
         printf("[DEBUG] POST complete, data: %s\n", post_buffer);
         
-        // Process complete POST request
         if (strcmp(url, "/api/pump/control") == 0) {
             response_data = handle_pump_control(post_buffer);
             status_code = 200;
@@ -172,17 +206,20 @@ static enum MHD_Result handle_request(void *cls, struct MHD_Connection *connecti
         } else if (strcmp(url, "/api/pump/history") == 0) {
             response_data = handle_pump_history();
             
+        } else if (strcmp(url, "/api/gateway/status") == 0) { 
+            response_data = handle_gateway_status();
+            
         } else {
             status_code = 404;
             response_data = strdup("{\"error\":\"Not found\"}");
         }
     }
-    else {
-        status_code = 404;
+        else {
+        status_code = 405;
         response_data = strdup("{\"error\":\"Method not allowed\"}");
     }
     
-    printf("[DEBUG] Response: %d - %s\n", status_code, response_data);
+    printf("[DEBUG] Response: %d\n", status_code);
     
     response = MHD_create_response_from_buffer(strlen(response_data), response_data, MHD_RESPMEM_MUST_FREE);
     MHD_add_response_header(response, "Access-Control-Allow-Origin", "*");
@@ -207,6 +244,7 @@ void* http_api_thread(void *arg) {
     }
     
     printf("[HTTP-API] Running on http://localhost:%d\n", HTTP_PORT);
+    printf( "GET http://localhost:%d/api/gateway/status - Check gateway hardware\n", HTTP_PORT);
     printf("  POST http://localhost:%d/api/pump/control  - Send command\n", HTTP_PORT);
     printf("  POST http://localhost:%d/api/pump/feedback - Receive hardware status\n", HTTP_PORT);
     printf("  GET  http://localhost:%d/api/pump/status   - Get current state\n", HTTP_PORT);

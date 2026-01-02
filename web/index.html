@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pump Control Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .update-time {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .pump-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .pump-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+        
+        .pump-card.running {
+            border-left: 5px solid #28a745;
+        }
+        
+        .pump-card.stopped {
+            border-left: 5px solid #dc3545;
+        }
+        
+        .pump-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .pump-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .status-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .status-badge.running {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-badge.stopped {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .pump-info {
+            margin-bottom: 20px;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .info-label {
+            color: #666;
+            font-weight: 500;
+        }
+        
+        .info-value {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .control-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        button:hover {
+            transform: scale(1.05);
+        }
+        
+        button:active {
+            transform: scale(0.95);
+        }
+        
+        .btn-on {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-on:hover {
+            background: #218838;
+        }
+        
+        .btn-off {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-off:hover {
+            background: #c82333;
+        }
+        
+        .history-section {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .history-title {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .btn-refresh {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+        }
+        
+        .btn-refresh:hover {
+            background: #0056b3;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        
+        thead {
+            background: #f8f9fa;
+        }
+        
+        th {
+            padding: 15px;
+            text-align: left;
+            font-weight: bold;
+            color: #333;
+            border-bottom: 2px solid #dee2e6;
+        }
+        
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .timestamp {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .state-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .state-on {
+            background: #28a745;
+        }
+        
+        .state-off {
+            background: #dc3545;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+            font-size: 1.2em;
+        }
+        
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 1.8em;
+            }
+            
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            table {
+                font-size: 0.85em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚰 Pump Control System</h1>
+            <div class="update-time">Last updated: <span id="lastUpdate">--:--:--</span></div>
+        </header>
+        
+        <div class="status-grid" id="statusGrid">
+            <div class="loading">Loading pump status...</div>
+        </div>
+        
+        <div class="history-section">
+            <div class="history-header">
+                <h2 class="history-title">📊 History Log</h2>
+                <button class="btn-refresh" onclick="loadHistory()">🔄 Refresh</button>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Pump 1</th>
+                        <th>Pump 2</th>
+                    </tr>
+                </thead>
+                <tbody id="historyBody">
+                    <tr><td colspan="4" class="loading">Loading history...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080';
+        
+        // Load pump status
+        async function loadStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/api/pump/status`);
+                const data = await response.json();
+                
+                updateStatusDisplay(data);
+                updateLastUpdateTime();
+            } catch (error) {
+                console.error('Error loading status:', error);
+            }
+        }
+        
+        // Update status display
+        function updateStatusDisplay(data) {
+            const grid = document.getElementById('statusGrid');
+            
+            grid.innerHTML = `
+                ${createPumpCard(1, data.pump1, data.pump1_status)}
+                ${createPumpCard(2, data.pump2, data.pump2_status)}
+            `;
+        }
+        
+        // Create pump card HTML
+        function createPumpCard(pumpId, command, status) {
+            const isRunning = status === 1;
+            const cmdText = command === 1 ? 'ON' : 'OFF';
+            const statusText = isRunning ? 'RUNNING' : 'STOPPED';
+            
+            return `
+                <div class="pump-card ${isRunning ? 'running' : 'stopped'}">
+                    <div class="pump-header">
+                        <div class="pump-title">Pump ${pumpId}</div>
+                        <div class="status-badge ${isRunning ? 'running' : 'stopped'}">${statusText}</div>
+                    </div>
+                    <div class="pump-info">
+                        <div class="info-row">
+                            <span class="info-label">Command:</span>
+                            <span class="info-value">${cmdText}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Actual Status:</span>
+                            <span class="info-value">${statusText}</span>
+                        </div>
+                    </div>
+                    <div class="control-buttons">
+                        <button class="btn-on" onclick="control(${pumpId}, 1)">⚡ TURN ON</button>
+                        <button class="btn-off" onclick="control(${pumpId}, 0)">⏸️ TURN OFF</button>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Control pump
+        async function control(pumpId, state) {
+            try {
+                const response = await fetch(`${API_BASE}/api/pump/control`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({pump_id: pumpId, state: state})
+                });
+                
+                if (response.ok) {
+                    console.log(`Pump ${pumpId} ${state ? 'ON' : 'OFF'} command sent`);
+                    // Reload status after short delay
+                    setTimeout(loadStatus, 200);
+                    setTimeout(loadHistory, 300);
+                }
+            } catch (error) {
+                console.error('Error controlling pump:', error);
+                alert('Failed to send command. Please try again.');
+            }
+        }
+        
+        // Load history
+        async function loadHistory() {
+            try {
+                const response = await fetch(`${API_BASE}/api/pump/history`);
+                const data = await response.json();
+                console.log(data);
+                
+                const tbody = document.getElementById('historyBody');
+                
+                if (data.count === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No history data available</td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = data.data.map(item => `
+                    <tr>
+                        <td class="timestamp">${formatTimestamp(item.timestamp)}</td>
+                        <td>${formatPumpState(item.pump1, item.pump1_status)}</td>
+                        <td>${formatPumpState(item.pump2, item.pump2_status)}</td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading history:', error);
+            }
+        }
+        
+        // Format pump state
+        function formatPumpState(cmd, status) {
+            const cmdText = cmd === 1 ? 'ON' : 'OFF';
+            const statusIcon = status === 1 ? '✅' : '⛔';
+            const stateClass = status === 1 ? 'state-on' : 'state-off';
+            
+            return `
+                <span class="state-indicator ${stateClass}"></span>
+                ${cmdText} ${statusIcon}
+            `;
+        }
+        
+        // Format timestamp
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleString('en-US', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+        }
+        
+        // Update last update time
+        function updateLastUpdateTime() {
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = now.toLocaleTimeString();
+        }
+        
+        // Auto refresh every 2 seconds
+        setInterval(loadStatus, 2000);
+        
+        // Initial load
+        loadStatus();
+        loadHistory();
+    </script>
+</body>
+</html>

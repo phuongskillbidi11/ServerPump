@@ -17,7 +17,27 @@ int mqtt_message_arrived(void *context, char *topicName, int topicLen, MQTTClien
     struct json_object *parsed = json_tokener_parse(payload);
     if (parsed) {
         struct json_object *pump_id_obj, *state_obj, *status_obj;
-        
+        // Nhận heartbeat từ gateway
+        if (strcmp(topicName, "gateway/heartbeat") == 0) {
+            struct json_object *parsed = json_tokener_parse(payload);
+            if (parsed) {
+                struct json_object *device_id_obj, *firmware_obj;
+                
+                const char *device_id = NULL;
+                const char *firmware = NULL;
+                
+                if (json_object_object_get_ex(parsed, "device_id", &device_id_obj)) {
+                    device_id = json_object_get_string(device_id_obj);
+                }
+                
+                if (json_object_object_get_ex(parsed, "firmware", &firmware_obj)) {
+                    firmware = json_object_get_string(firmware_obj);
+                }
+                
+                update_gateway_heartbeat(device_id, firmware);
+                json_object_put(parsed);
+            }
+        }
         // Nhận lệnh điều khiển từ HTTP API
         if (json_object_object_get_ex(parsed, "pump_id", &pump_id_obj) &&
             json_object_object_get_ex(parsed, "state", &state_obj)) {
@@ -77,10 +97,9 @@ void* mqtt_publisher_thread(void *arg) {
         //          current_pump_status.pump3,
         //          current_pump_status.timestamp);
         snprintf(payload, sizeof(payload), 
-         "{\"pump1\":%d,\"pump1_status\":%d,\"pump2\":%d,\"pump2_status\":%d,\"pump3\":%d,\"pump3_status\":%d,\"timestamp\":%ld}",
+         "{\"pump1\":%d,\"pump1_status\":%d,\"pump2\":%d,\"pump2_status\":%d,\"timestamp\":%ld}",
          current_pump_status.pump1, current_pump_status.pump1_status,
          current_pump_status.pump2, current_pump_status.pump2_status,
-         current_pump_status.pump3, current_pump_status.pump3_status,
          current_pump_status.timestamp);
         pthread_mutex_unlock(&lock);
         
@@ -118,7 +137,7 @@ void* mqtt_subscriber_thread(void *arg) {
         return NULL;
     }
     printf("[MQTT-SUB] Connected!\n");
-    
+    MQTTClient_subscribe(mqtt_sub_client, "gateway/heartbeat", 1);
     MQTTClient_subscribe(mqtt_sub_client, "pump/control", 1);
     MQTTClient_subscribe(mqtt_sub_client, "pump/feedback", 1);
     printf("[MQTT-SUB] Subscribed to: pump/control and pump/feedback\n");

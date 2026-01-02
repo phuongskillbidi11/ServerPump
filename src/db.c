@@ -112,9 +112,9 @@ int db_insert_feedback(int pump_id, int status, time_t timestamp) {
 }
 
 // Insert snapshot
-int db_insert_snapshot(int p1_cmd, int p1_st, int p2_cmd, int p2_st, int p3_cmd, int p3_st, time_t timestamp) {
-    const char *sql = "INSERT INTO pump_snapshots (pump1_cmd, pump1_status, pump2_cmd, pump2_status, pump3_cmd, pump3_status, timestamp) "
-                      "VALUES (?, ?, ?, ?, ?, ?, ?)";
+int db_insert_snapshot(int p1_cmd, int p1_st, int p2_cmd, int p2_st, time_t timestamp) {
+    const char *sql = "INSERT INTO pump_snapshots (pump1_cmd, pump1_status, pump2_cmd, pump2_status, timestamp) "
+                      "VALUES (?, ?, ?, ?, ?)";
     sqlite3_stmt *stmt;
     
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -125,8 +125,8 @@ int db_insert_snapshot(int p1_cmd, int p1_st, int p2_cmd, int p2_st, int p3_cmd,
     sqlite3_bind_int(stmt, 2, p1_st);
     sqlite3_bind_int(stmt, 3, p2_cmd);
     sqlite3_bind_int(stmt, 4, p2_st);
-    sqlite3_bind_int(stmt, 5, p3_cmd);
-    sqlite3_bind_int(stmt, 6, p3_st);
+    // sqlite3_bind_int(stmt, 5, p3_cmd);
+    // sqlite3_bind_int(stmt, 6, p3_st);
     sqlite3_bind_int64(stmt, 7, timestamp);
     
     int rc = sqlite3_step(stmt);
@@ -137,7 +137,7 @@ int db_insert_snapshot(int p1_cmd, int p1_st, int p2_cmd, int p2_st, int p3_cmd,
 
 // Get history (JSON format)
 int db_get_history(char *output, int max_size, int limit) {
-    const char *sql = "SELECT pump1_cmd, pump1_status, pump2_cmd, pump2_status, pump3_cmd, pump3_status, timestamp "
+    const char *sql = "SELECT pump1_cmd, pump1_status, pump2_cmd, pump2_status, timestamp "
                       "FROM pump_snapshots ORDER BY timestamp DESC LIMIT ?";
     sqlite3_stmt *stmt;
     
@@ -156,15 +156,14 @@ int db_get_history(char *output, int max_size, int limit) {
     
     while (sqlite3_step(stmt) == SQLITE_ROW && remaining > 200) {
         int written = snprintf(ptr, remaining,
-                              "%s{\"pump1\":%d,\"pump1_status\":%d,\"pump2\":%d,\"pump2_status\":%d,\"pump3\":%d,\"pump3_status\":%d,\"timestamp\":%ld}",
+                              "%s{\"pump1\":%d,\"pump1_status\":%d,\"pump2\":%d,\"pump2_status\":%d,\"timestamp\":%ld}",
                               (count > 0 ? "," : ""),
                               sqlite3_column_int(stmt, 0),
                               sqlite3_column_int(stmt, 1),
                               sqlite3_column_int(stmt, 2),
                               sqlite3_column_int(stmt, 3),
                               sqlite3_column_int(stmt, 4),
-                              sqlite3_column_int(stmt, 5),
-                              sqlite3_column_int64(stmt, 6));
+                              sqlite3_column_int64(stmt, 5));
         ptr += written;
         remaining -= written;
         count++;

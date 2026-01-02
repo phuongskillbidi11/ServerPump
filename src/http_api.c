@@ -96,11 +96,23 @@ char* handle_gateway_status() {
 char* handle_pump_status() {
     pthread_mutex_lock(&lock);
     
-    static char response[512];
+    static char response[1024];
     snprintf(response, sizeof(response),
-             "{\"pump1\":%d,\"pump1_status\":%d,\"pump2\":%d,\"pump2_status\":%d,\"timestamp\":%ld}",
-             current_pump_status.pump1, current_pump_status.pump1_status,
-             current_pump_status.pump2, current_pump_status.pump2_status,
+             "{"
+             "\"pump1\":%d,"
+             "\"pump1_status\":%d,"
+             "\"pump2\":%d,"
+             "\"pump2_status\":%d,"
+             "\"busy\":%d,"
+             "\"alarm\":%d,"
+             "\"timestamp\":%ld"
+             "}",
+             current_pump_status.pump1,
+             current_pump_status.pump1_status,
+             current_pump_status.pump2,
+             current_pump_status.pump2_status,
+             current_pump_status.busy,
+             current_pump_status.alarm,
              current_pump_status.timestamp);
     
     pthread_mutex_unlock(&lock);

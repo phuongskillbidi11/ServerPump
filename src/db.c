@@ -37,15 +37,23 @@ int db_init() {
         
         "CREATE TABLE IF NOT EXISTS pump_snapshots ("
         "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
-        "  pump1_cmd INTEGER DEFAULT 0,"
-        "  pump1_status INTEGER DEFAULT 0,"
-        "  pump2_cmd INTEGER DEFAULT 0,"
-        "  pump2_status INTEGER DEFAULT 0,"
-        "  pump3_cmd INTEGER DEFAULT 0,"
-        "  pump3_status INTEGER DEFAULT 0,"
+        "  pump1_cmd INTEGER,"
+        "  pump1_status INTEGER,"      // 0=Unknown, 1=Running, 2=Stopped, 3=Error
+        "  pump2_cmd INTEGER,"
+        "  pump2_status INTEGER,"      // 0=Unknown, 1=Running, 2=Stopped, 3=Error
+        "  busy INTEGER,"              // 0=Idle, 1=Starting_P1, 2=Starting_P2
+        "  alarm INTEGER,"             // 0=No, 1=Yes
         "  timestamp INTEGER NOT NULL"
         ");"
-        
+
+        "CREATE TABLE IF NOT EXISTS gateway_history ("
+        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  is_online INTEGER,"
+        "  device_id TEXT,"
+        "  firmware TEXT,"
+        "  timestamp INTEGER NOT NULL"
+        ");"
+
         "CREATE INDEX IF NOT EXISTS idx_commands_time ON pump_commands(timestamp);"
         "CREATE INDEX IF NOT EXISTS idx_feedback_time ON pump_feedback(timestamp);"
         "CREATE INDEX IF NOT EXISTS idx_snapshots_time ON pump_snapshots(timestamp);";
@@ -112,12 +120,17 @@ int db_insert_feedback(int pump_id, int status, time_t timestamp) {
 }
 
 // Insert snapshot
-int db_insert_snapshot(int p1_cmd, int p1_st, int p2_cmd, int p2_st, time_t timestamp) {
-    const char *sql = "INSERT INTO pump_snapshots (pump1_cmd, pump1_status, pump2_cmd, pump2_status, timestamp) "
-                      "VALUES (?, ?, ?, ?, ?)";
+int db_insert_snapshot(int p1_cmd, int p1_st, int p2_cmd, int p2_st, int busy, int alarm, time_t timestamp) {
+    if (!db) {
+        fprintf(stderr, "[DB] ERROR: Database not initialized!\n");
+        return -1;
+    }
+    
+    const char *sql = "INSERT INTO pump_snapshots VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)";
     sqlite3_stmt *stmt;
     
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        fprintf(stderr, "[DB] ERROR preparing snapshot insert: %s\n", sqlite3_errmsg(db));
         return -1;
     }
     
@@ -125,23 +138,64 @@ int db_insert_snapshot(int p1_cmd, int p1_st, int p2_cmd, int p2_st, time_t time
     sqlite3_bind_int(stmt, 2, p1_st);
     sqlite3_bind_int(stmt, 3, p2_cmd);
     sqlite3_bind_int(stmt, 4, p2_st);
-    // sqlite3_bind_int(stmt, 5, p3_cmd);
-    // sqlite3_bind_int(stmt, 6, p3_st);
+    sqlite3_bind_int(stmt, 5, busy);
+    sqlite3_bind_int(stmt, 6, alarm);
     sqlite3_bind_int64(stmt, 7, timestamp);
     
     int rc = sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
+    if (rc != SQLITE_DONE) {
+        fprintf(stderr, "[DB] ERROR inserting snapshot: %s\n", sqlite3_errmsg(db));
+        sqlite3_finalize(stmt);
+        return -1;
+    }
     
-    return (rc == SQLITE_DONE) ? 0 : -1;
+    sqlite3_finalize(stmt);
+    printf("[DB] ✓ Inserted snapshot\n");
+    return 0;
 }
-
-// Get history (JSON format)
-int db_get_history(char *output, int max_size, int limit) {
-    const char *sql = "SELECT pump1_cmd, pump1_status, pump2_cmd, pump2_status, timestamp "
-                      "FROM pump_snapshots ORDER BY timestamp DESC LIMIT ?";
+int db_insert_gateway_status(int is_online, const char *device_id, const char *firmware, time_t timestamp) {
+    if (!db) {
+        fprintf(stderr, "[DB] ERROR: Database not initialized!\n");
+        return -1;
+    }
+    
+    const char *sql = "INSERT INTO gateway_history VALUES (NULL, ?, ?, ?, ?)";
     sqlite3_stmt *stmt;
     
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        fprintf(stderr, "[DB] ERROR preparing gateway insert: %s\n", sqlite3_errmsg(db));
+        return -1;
+    }
+    
+    sqlite3_bind_int(stmt, 1, is_online);
+    sqlite3_bind_text(stmt, 2, device_id ? device_id : "", -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, firmware ? firmware : "", -1, SQLITE_STATIC);
+    sqlite3_bind_int64(stmt, 4, timestamp);
+    
+    int rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        fprintf(stderr, "[DB] ERROR inserting gateway status: %s\n", sqlite3_errmsg(db));
+        sqlite3_finalize(stmt);
+        return -1;
+    }
+    
+    sqlite3_finalize(stmt);
+    printf("[DB] ✓ Inserted gateway status\n");
+    return 0;
+}
+// Get history (JSON format)
+int db_get_history(char *output, int max_size, int limit) {
+    if (!db) {
+        sprintf(output, "{\"error\":\"Database not initialized\"}");
+        return -1;
+    }
+    
+    const char *sql = "SELECT * FROM pump_snapshots ORDER BY timestamp DESC LIMIT ?";
+    sqlite3_stmt *stmt;
+    
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        fprintf(stderr, "[DB] ERROR preparing history query: %s\n", sqlite3_errmsg(db));
+        sprintf(output, "{\"error\":\"Query failed\"}");
         return -1;
     }
     
@@ -151,31 +205,47 @@ int db_get_history(char *output, int max_size, int limit) {
     int remaining = max_size;
     int count = 0;
     
+    // Start JSON object
     ptr += snprintf(ptr, remaining, "{\"count\":0,\"data\":[");
     remaining = max_size - (ptr - output);
     
     while (sqlite3_step(stmt) == SQLITE_ROW && remaining > 200) {
+        // Columns: id(0), pump1_cmd(1), pump1_status(2), pump2_cmd(3), pump2_status(4), busy(5), alarm(6), timestamp(7)
+        
         int written = snprintf(ptr, remaining,
-                              "%s{\"pump1\":%d,\"pump1_status\":%d,\"pump2\":%d,\"pump2_status\":%d,\"timestamp\":%ld}",
-                              (count > 0 ? "," : ""),
-                              sqlite3_column_int(stmt, 0),
-                              sqlite3_column_int(stmt, 1),
-                              sqlite3_column_int(stmt, 2),
-                              sqlite3_column_int(stmt, 3),
-                              sqlite3_column_int(stmt, 4),
-                              sqlite3_column_int64(stmt, 5));
+            "%s{"
+            "\"pump1\":%d,"
+            "\"pump1_status\":%d,"
+            "\"pump2\":%d,"
+            "\"pump2_status\":%d,"
+            "\"busy\":%d,"
+            "\"alarm\":%d,"
+            "\"timestamp\":%lld"
+            "}",
+            (count > 0 ? "," : ""),
+            sqlite3_column_int(stmt, 1),           // pump1_cmd
+            sqlite3_column_int(stmt, 2),           // pump1_status (0-3)
+            sqlite3_column_int(stmt, 3),           // pump2_cmd
+            sqlite3_column_int(stmt, 4),           // pump2_status (0-3)
+            sqlite3_column_int(stmt, 5),           // busy (0-2)
+            sqlite3_column_int(stmt, 6),           // alarm (0-1)
+            (long long)sqlite3_column_int64(stmt, 7)  // timestamp
+        );
+        
         ptr += written;
         remaining -= written;
         count++;
     }
     
+    // Close JSON array and object
     snprintf(ptr, remaining, "]}");
     sqlite3_finalize(stmt);
     
-    // Update count
-    snprintf(output + 9, 10, "%d", count);
+    // Update count in JSON (overwrite placeholder "0")
+    sprintf(output + 9, "%d", count);
     output[9 + snprintf(NULL, 0, "%d", count)] = ',';
     
+    printf("[DB] Retrieved %d history records\n", count);
     return 0;
 }
 

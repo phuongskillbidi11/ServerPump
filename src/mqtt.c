@@ -9,57 +9,130 @@ MQTTClient mqtt_pub_client;
 MQTTClient mqtt_sub_client;
 
 int mqtt_message_arrived(void *context, char *topicName, int topicLen, MQTTClient_message *message) {
-    char payload[512];
+    char payload[1024];
     snprintf(payload, sizeof(payload), "%.*s", (int)message->payloadlen, (char*)message->payload);
     
-    printf("[MQTT-SUB] Topic: %s, Payload: %s\n", topicName, payload);
+    printf("[MQTT-SUB] Topic: %s\n", topicName);
+    printf("[MQTT-SUB] Payload: %s\n", payload);
     
-    struct json_object *parsed = json_tokener_parse(payload);
-    if (parsed) {
-        struct json_object *pump_id_obj, *state_obj, *status_obj;
-        // Nhận heartbeat từ gateway
-        if (strcmp(topicName, "gateway/heartbeat") == 0) {
-            struct json_object *parsed = json_tokener_parse(payload);
-            if (parsed) {
-                struct json_object *device_id_obj, *firmware_obj;
-                
-                const char *device_id = NULL;
-                const char *firmware = NULL;
-                
-                if (json_object_object_get_ex(parsed, "device_id", &device_id_obj)) {
-                    device_id = json_object_get_string(device_id_obj);
-                }
-                
-                if (json_object_object_get_ex(parsed, "firmware", &firmware_obj)) {
-                    firmware = json_object_get_string(firmware_obj);
-                }
-                
-                update_gateway_heartbeat(device_id, firmware);
-                json_object_put(parsed);
+    // ===== XỬ LÝ GATEWAY HEARTBEAT =====
+    if (strcmp(topicName, "gateway/heartbeat") == 0) {
+        struct json_object *parsed = json_tokener_parse(payload);
+        if (parsed) {
+            struct json_object *device_id_obj, *firmware_obj, *status_obj;
+            
+            const char *device_id = NULL;
+            const char *firmware = NULL;
+            int status = 1;  // default online
+            
+            if (json_object_object_get_ex(parsed, "device_id", &device_id_obj)) {
+                device_id = json_object_get_string(device_id_obj);
             }
-        }
-        // Nhận lệnh điều khiển từ HTTP API
-        if (json_object_object_get_ex(parsed, "pump_id", &pump_id_obj) &&
-            json_object_object_get_ex(parsed, "state", &state_obj)) {
             
-            int pump_id = json_object_get_int(pump_id_obj);
-            int state = json_object_get_int(state_obj);
+            if (json_object_object_get_ex(parsed, "firmware", &firmware_obj)) {
+                firmware = json_object_get_string(firmware_obj);
+            }
             
-            update_pump_status(pump_id, state);
-        }
-        
-        // Nhận feedback từ hardware
-        if (json_object_object_get_ex(parsed, "pump_id", &pump_id_obj) &&
-            json_object_object_get_ex(parsed, "status", &status_obj)) {
+            if (json_object_object_get_ex(parsed, "status", &status_obj)) {
+                status = json_object_get_int(status_obj);
+            }
             
-            int pump_id = json_object_get_int(pump_id_obj);
-            int status = json_object_get_int(status_obj);
-            
-            update_pump_feedback(pump_id, status);
+            update_gateway_heartbeat(device_id, firmware, status);
+            json_object_put(parsed);
         }
         
-        json_object_put(parsed);
+        MQTTClient_freeMessage(&message);
+        MQTTClient_free(topicName);
+        return 1;
     }
+    
+    // ===== XỬ LÝ PUMP CONTROL =====
+    if (strcmp(topicName, "pump/control") == 0) {
+        struct json_object *parsed = json_tokener_parse(payload);
+        if (parsed) {
+            struct json_object *pump_id_obj, *state_obj;
+            
+            if (json_object_object_get_ex(parsed, "pump_id", &pump_id_obj) &&
+                json_object_object_get_ex(parsed, "state", &state_obj)) {
+                
+                int pump_id = json_object_get_int(pump_id_obj);
+                int state = json_object_get_int(state_obj);
+                
+                update_pump_status(pump_id, state);
+            }
+            
+            json_object_put(parsed);
+        }
+        
+        MQTTClient_freeMessage(&message);
+        MQTTClient_free(topicName);
+        return 1;
+    }
+    
+    // ===== XỬ LÝ PUMP FEEDBACK (Từ ESP32/Hardware) =====
+    if (strcmp(topicName, "pump/feedback") == 0) {
+        struct json_object *parsed = json_tokener_parse(payload);
+        if (parsed) {
+            struct json_object *pump_id_obj, *status_obj, *busy_obj, *alarm_obj;
+            
+            // Parse pump_id và status (0=Unknown, 1=Running, 2=Stopped, 3=Error)
+            if (json_object_object_get_ex(parsed, "pump_id", &pump_id_obj) &&
+                json_object_object_get_ex(parsed, "status", &status_obj)) {
+                
+                int pump_id = json_object_get_int(pump_id_obj);
+                int status = json_object_get_int(status_obj);
+                
+                // Validate status (0-3)
+                if (status >= 0 && status <= 3) {
+                    update_pump_feedback(pump_id, status);
+                } else {
+                    printf("[MQTT-SUB] Invalid pump status: %d (must be 0-3)\n", status);
+                }
+            }
+            
+            // Parse busy (0=Idle, 1=Starting_P1, 2=Starting_P2)
+            if (json_object_object_get_ex(parsed, "busy", &busy_obj)) {
+                int busy = json_object_get_int(busy_obj);
+                
+                if (busy >= 0 && busy <= 2) {
+                    pthread_mutex_lock(&lock);
+                    current_pump_status.busy = busy;
+                    current_pump_status.timestamp = time(NULL);
+                    pthread_mutex_unlock(&lock);
+                    
+                    const char *busy_str[] = {"Idle", "Starting_P1", "Starting_P2"};
+                    printf("[MQTT-SUB] Busy status updated: %s\n", busy_str[busy]);
+                } else {
+                    printf("[MQTT-SUB] Invalid busy value: %d (must be 0-2)\n", busy);
+                }
+            }
+            
+            // Parse alarm (0=No, 1=Yes)
+            if (json_object_object_get_ex(parsed, "alarm", &alarm_obj)) {
+                int alarm = json_object_get_int(alarm_obj);
+                
+                if (alarm == 0 || alarm == 1) {
+                    pthread_mutex_lock(&lock);
+                    current_pump_status.alarm = alarm;
+                    current_pump_status.timestamp = time(NULL);
+                    pthread_mutex_unlock(&lock);
+                    
+                    printf("[MQTT-SUB] Alarm status: %s\n", alarm ? "ACTIVE" : "Clear");
+                } else {
+                    printf("[MQTT-SUB] Invalid alarm value: %d (must be 0 or 1)\n", alarm);
+                }
+            }
+            
+            json_object_put(parsed);
+        }
+        
+        MQTTClient_freeMessage(&message);
+        MQTTClient_free(topicName);
+        return 1;
+    }
+    
+    // ===== TOPIC KHÔNG XÁC ĐỊNH =====
+    printf("[MQTT-SUB] Unhandled topic: %s\n", topicName);
     
     MQTTClient_freeMessage(&message);
     MQTTClient_free(topicName);
@@ -97,10 +170,11 @@ void* mqtt_publisher_thread(void *arg) {
         //          current_pump_status.pump3,
         //          current_pump_status.timestamp);
         snprintf(payload, sizeof(payload), 
-         "{\"pump1\":%d,\"pump1_status\":%d,\"pump2\":%d,\"pump2_status\":%d,\"timestamp\":%ld}",
-         current_pump_status.pump1, current_pump_status.pump1_status,
-         current_pump_status.pump2, current_pump_status.pump2_status,
-         current_pump_status.timestamp);
+        "{\"pump1\":%d,\"pump1_status\":%d,\"pump2\":%d,\"pump2_status\":%d,\"busy\":%d,\"alarm\":%d,\"timestamp\":%ld}",
+        current_pump_status.pump1, current_pump_status.pump1_status,
+        current_pump_status.pump2, current_pump_status.pump2_status,
+        current_pump_status.busy, current_pump_status.alarm,
+        current_pump_status.timestamp);
         pthread_mutex_unlock(&lock);
         
         msg.payload = payload;

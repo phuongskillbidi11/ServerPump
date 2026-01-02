@@ -1,7 +1,3 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
 A multi-threaded C server application for controlling and monitoring pumps via MQTT and HTTP. The system manages 3 pumps with bidirectional communication: commands are sent via HTTP/MQTT, and hardware feedback is received via MQTT. All state changes are persisted to SQLite.

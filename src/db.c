@@ -201,17 +201,12 @@ int db_get_history(char *output, int max_size, int limit) {
     
     sqlite3_bind_int(stmt, 1, limit);
     
-    char *ptr = output;
-    int remaining = max_size;
+    char temp_data[102400];
+    char *ptr = temp_data;
+    int remaining = sizeof(temp_data);
     int count = 0;
     
-    // Start JSON object
-    ptr += snprintf(ptr, remaining, "{\"count\":0,\"data\":[");
-    remaining = max_size - (ptr - output);
-    
     while (sqlite3_step(stmt) == SQLITE_ROW && remaining > 200) {
-        // Columns: id(0), pump1_cmd(1), pump1_status(2), pump2_cmd(3), pump2_status(4), busy(5), alarm(6), timestamp(7)
-        
         int written = snprintf(ptr, remaining,
             "%s{"
             "\"pump1\":%d,"
@@ -223,13 +218,13 @@ int db_get_history(char *output, int max_size, int limit) {
             "\"timestamp\":%lld"
             "}",
             (count > 0 ? "," : ""),
-            sqlite3_column_int(stmt, 1),           // pump1_cmd
-            sqlite3_column_int(stmt, 2),           // pump1_status (0-3)
-            sqlite3_column_int(stmt, 3),           // pump2_cmd
-            sqlite3_column_int(stmt, 4),           // pump2_status (0-3)
-            sqlite3_column_int(stmt, 5),           // busy (0-2)
-            sqlite3_column_int(stmt, 6),           // alarm (0-1)
-            (long long)sqlite3_column_int64(stmt, 7)  // timestamp
+            sqlite3_column_int(stmt, 1),
+            sqlite3_column_int(stmt, 2),
+            sqlite3_column_int(stmt, 3),
+            sqlite3_column_int(stmt, 4),
+            sqlite3_column_int(stmt, 5),
+            sqlite3_column_int(stmt, 6),
+            (long long)sqlite3_column_int64(stmt, 7)
         );
         
         ptr += written;
@@ -237,13 +232,10 @@ int db_get_history(char *output, int max_size, int limit) {
         count++;
     }
     
-    // Close JSON array and object
-    snprintf(ptr, remaining, "]}");
     sqlite3_finalize(stmt);
     
-    // Update count in JSON (overwrite placeholder "0")
-    sprintf(output + 9, "%d", count);
-    output[9 + snprintf(NULL, 0, "%d", count)] = ',';
+    // Build final JSON với count ĐÚNG
+    snprintf(output, max_size, "{\"count\":%d,\"data\":[%s]}", count, temp_data);
     
     printf("[DB] Retrieved %d history records\n", count);
     return 0;

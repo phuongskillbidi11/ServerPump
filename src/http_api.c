@@ -121,33 +121,12 @@ char* handle_pump_status() {
 
 // GET /api/pump/history
 char* handle_pump_history() {
-    pthread_mutex_lock(&lock);
-    
     static char response[102400];
-    char *ptr = response;
-    int remaining = sizeof(response);
+    int result = db_get_history(response, sizeof(response), 100);
     
-    int written = snprintf(ptr, remaining, "{\"count\":%d,\"data\":[", pump_history.count);
-    ptr += written;
-    remaining -= written;
-    
-    for (int i = 0; i < pump_history.count && remaining > 100; i++) {
-        int idx = (pump_history.index - pump_history.count + i + MAX_HISTORY) % MAX_HISTORY;
-        PumpStatus *item = &pump_history.items[idx];
-        
-        written = snprintf(ptr, remaining,
-                          "%s{\"pump1\":%d,\"pump1_status\":%d,\"pump2\":%d,\"pump2_status\":%d,\"timestamp\":%ld}",
-                          (i > 0 ? "," : ""),
-                          item->pump1, item->pump1_status,
-                          item->pump2, item->pump2_status,
-                        //   item->pump3, item->pump3_status,
-                          item->timestamp);
-        ptr += written;
-        remaining -= written;
+    if (result != 0) {
+        return strdup("{\"error\":\"Database query failed\"}");
     }
-    
-    snprintf(ptr, remaining, "]}");
-    pthread_mutex_unlock(&lock);
     
     return strdup(response);
 }

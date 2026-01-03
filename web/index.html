@@ -3,438 +3,306 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pump Control Dashboard</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        
-        header {
-            text-align: center;
-            color: white;
-            margin-bottom: 30px;
-        }
-        
-        header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-        
-        .update-time {
-            font-size: 0.9em;
-            opacity: 0.9;
-        }
-        
-        .status-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .pump-card {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-        
-        .pump-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
-        }
-        
-        .pump-card.running {
-            border-left: 5px solid #28a745;
-        }
-        
-        .pump-card.stopped {
-            border-left: 5px solid #dc3545;
-        }
-        
-        .pump-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        
-        .pump-title {
-            font-size: 1.5em;
-            font-weight: bold;
-            color: #333;
-        }
-        
-        .status-badge {
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 0.85em;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-        
-        .status-badge.running {
-            background: #d4edda;
-            color: #155724;
-        }
-        
-        .status-badge.stopped {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        
-        .pump-info {
-            margin-bottom: 20px;
-        }
-        
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid #eee;
-        }
-        
-        .info-label {
-            color: #666;
-            font-weight: 500;
-        }
-        
-        .info-value {
-            font-weight: bold;
-            color: #333;
-        }
-        
-        .control-buttons {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-        
-        button {
-            padding: 12px;
-            border: none;
-            border-radius: 8px;
-            font-size: 1em;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        
-        button:hover {
-            transform: scale(1.05);
-        }
-        
-        button:active {
-            transform: scale(0.95);
-        }
-        
-        .btn-on {
-            background: #28a745;
-            color: white;
-        }
-        
-        .btn-on:hover {
-            background: #218838;
-        }
-        
-        .btn-off {
-            background: #dc3545;
-            color: white;
-        }
-        
-        .btn-off:hover {
-            background: #c82333;
-        }
-        
-        .history-section {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        }
-        
-        .history-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        
-        .history-title {
-            font-size: 1.8em;
-            font-weight: bold;
-            color: #333;
-        }
-        
-        .btn-refresh {
-            background: #007bff;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 8px;
-        }
-        
-        .btn-refresh:hover {
-            background: #0056b3;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-        
-        thead {
-            background: #f8f9fa;
-        }
-        
-        th {
-            padding: 15px;
-            text-align: left;
-            font-weight: bold;
-            color: #333;
-            border-bottom: 2px solid #dee2e6;
-        }
-        
-        td {
-            padding: 12px 15px;
-            border-bottom: 1px solid #eee;
-        }
-        
-        tr:hover {
-            background: #f8f9fa;
-        }
-        
-        .timestamp {
-            color: #666;
-            font-size: 0.9em;
-        }
-        
-        .state-indicator {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            margin-right: 5px;
-        }
-        
-        .state-on {
-            background: #28a745;
-        }
-        
-        .state-off {
-            background: #dc3545;
-        }
-        
-        .loading {
-            text-align: center;
-            padding: 50px;
-            color: #666;
-            font-size: 1.2em;
-        }
-        
-        @media (max-width: 768px) {
-            header h1 {
-                font-size: 1.8em;
-            }
-            
-            .status-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            table {
-                font-size: 0.85em;
-            }
-        }
-    </style>
+    <title>Pump Control System</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🚰 Pump Control System</h1>
-            <div class="update-time">Last updated: <span id="lastUpdate">--:--:--</span></div>
-        </header>
-        
-        <div class="status-grid" id="statusGrid">
-            <div class="loading">Loading pump status...</div>
-        </div>
-        
-        <div class="history-section">
-            <div class="history-header">
-                <h2 class="history-title">📊 History Log</h2>
-                <button class="btn-refresh" onclick="loadHistory()">🔄 Refresh</button>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <span class="material-symbols-rounded">water_drop</span>
+                <span>PUMP CONTROL</span>
             </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Pump 1</th>
-                        <th>Pump 2</th>
-                    </tr>
-                </thead>
-                <tbody id="historyBody">
-                    <tr><td colspan="4" class="loading">Loading history...</td></tr>
-                </tbody>
-            </table>
+            <button class="toggle-btn" onclick="toggleSidebar()">
+                <span class="material-symbols-rounded">menu</span>
+            </button>
+        </div>
+        <ul class="nav-list">
+            <li class="nav-item active" onclick="showPage('dashboard')">
+                <span class="material-symbols-rounded nav-icon">dashboard</span>
+                <span class="nav-label">Dashboard</span>
+            </li>
+            <li class="nav-item" onclick="showPage('history')">
+                <span class="material-symbols-rounded nav-icon">history</span>
+                <span class="nav-label">History</span>
+            </li>
+            <li class="nav-item" onclick="showPage('settings')">
+                <span class="material-symbols-rounded nav-icon">settings</span>
+                <span class="nav-label">Settings</span>
+            </li>
+        </ul>
+    </aside>
+
+    <!-- Mobile Menu Button -->
+    <button class="mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileMenu()">
+        <span class="material-symbols-rounded">menu</span>
+    </button>
+
+    <!-- Overlay -->
+    <div class="overlay" id="overlay" onclick="closeMobileMenu()"></div>
+
+    <!-- Main Content -->
+    <div class="main">
+        <!-- Dashboard Page -->
+        <div id="page-dashboard">
+            <div class="page-header">
+                <h1 class="page-title">
+                    <span class="material-symbols-rounded">monitoring</span>
+                    System Dashboard
+                </h1>
+                <div class="last-update">
+                    <span class="material-symbols-rounded" style="font-size: 16px;">schedule</span>
+                    Last updated: <span id="lastUpdate">--:--:--</span>
+                </div>
+            </div>
+
+            <!-- Gateway Status -->
+            <div class="gateway-card">
+                <h3>
+                    <span class="material-symbols-rounded">router</span>
+                    Gateway Status
+                </h3>
+                <div class="status-indicator">
+                    <span class="status-dot offline" id="gatewayDot"></span>
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                            <span class="material-symbols-rounded" style="font-size: 18px;">memory</span>
+                            <strong>Device:</strong> <span id="deviceId">--</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                            <span class="material-symbols-rounded" style="font-size: 18px;">update</span>
+                            <strong>Firmware:</strong> <span id="firmware">--</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="material-symbols-rounded" style="font-size: 18px;">access_time</span>
+                            <strong>Last Seen:</strong> <span id="lastSeen">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Status -->
+            <div class="gateway-card">
+                <h3>
+                    <span class="material-symbols-rounded">info</span>
+                    System Status
+                </h3>
+                <div class="info-row">
+                    <span class="info-label">
+                        <span class="material-symbols-rounded">settings_ethernet</span>
+                        Inverter Status:
+                    </span>
+                    <span class="info-value" id="busyStatus">--</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">
+                        <span class="material-symbols-rounded">notification_important</span>
+                        System Alarm:
+                    </span>
+                    <span class="info-value" id="alarmStatus">--</span>
+                </div>
+            </div>
+
+            <!-- Pumps -->
+            <div class="pump-grid" id="pumpGrid"></div>
+        </div>
+
+        <!-- History Page -->
+        <div id="page-history" class="hidden">
+            <div class="page-header">
+                <h1 class="page-title">
+                    <span class="material-symbols-rounded">history</span>
+                    History Log
+                </h1>
+            </div>
+            
+            <div class="history-section">
+                <!-- FILTERS & CONTROLS -->
+                <div class="history-controls">
+                    <!-- Row 1: Search & Quick Date Filters -->
+                    <div class="control-row">
+                        <!-- Search -->
+                        <div class="search-box">
+                            <span class="material-symbols-rounded">search</span>
+                            <input 
+                                type="text" 
+                                id="searchInput"
+                                placeholder="Search by time or status..." 
+                                oninput="handleSearchInput(this.value)"
+                            >
+                        </div>
+                        
+                        <!-- Quick Date Filters -->
+                        <div class="quick-filters">
+                            <button class="quick-filter-btn active" onclick="applyQuickFilter('all')">All</button>
+                            <button class="quick-filter-btn" onclick="applyQuickFilter('today')">Today</button>
+                            <button class="quick-filter-btn" onclick="applyQuickFilter('yesterday')">Yesterday</button>
+                            <button class="quick-filter-btn" onclick="applyQuickFilter('week')">Last 7 Days</button>
+                            <button class="quick-filter-btn" onclick="applyQuickFilter('month')">Last 30 Days</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Row 2: Date Range & Status Filters -->
+                    <div class="control-row">
+                        <!-- Date Range Picker -->
+                        <div class="date-range-picker">
+                            <div class="date-input-group">
+                                <span class="material-symbols-rounded">calendar_today</span>
+                                <input 
+                                    type="date" 
+                                    id="dateFrom"
+                                    onchange="filterByDateRange()"
+                                >
+                                <span class="date-separator">to</span>
+                                <input 
+                                    type="date" 
+                                    id="dateTo"
+                                    onchange="filterByDateRange()"
+                                >
+                                <button class="btn-clear-date" onclick="clearDateFilter()">
+                                    <span class="material-symbols-rounded">close</span>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Status Filters -->
+                        <div class="filter-group">
+                            <select onchange="filterByStatus('pump1', this.value)" class="filter-select">
+                                <option value="all">All P1 Status</option>
+                                <option value="0">Unknown</option>
+                                <option value="1">Running</option>
+                                <option value="2">Stopped</option>
+                                <option value="3">Error</option>
+                            </select>
+                            
+                            <select onchange="filterByStatus('pump2', this.value)" class="filter-select">
+                                <option value="all">All P2 Status</option>
+                                <option value="0">Unknown</option>
+                                <option value="1">Running</option>
+                                <option value="2">Stopped</option>
+                                <option value="3">Error</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Actions -->
+                        <div class="action-group">
+                            <button class="btn-action btn-export" onclick="exportToCSV()">
+                                <span class="material-symbols-rounded">download</span>
+                                <span class="btn-text">Export CSV</span>
+                            </button>
+                            
+                            <button class="btn-action btn-refresh" onclick="refreshHistory()">
+                                <span class="material-symbols-rounded">refresh</span>
+                                <span class="btn-text">Refresh</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Stats Summary -->
+                <div class="history-stats" id="historyStats">
+                    <div class="stat-card">
+                        <span class="material-symbols-rounded">database</span>
+                        <div>
+                            <div class="stat-label">Total Records</div>
+                            <div class="stat-value" id="totalRecords">0</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="material-symbols-rounded">filter_alt</span>
+                        <div>
+                            <div class="stat-label">Filtered</div>
+                            <div class="stat-value" id="filteredRecords">0</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="material-symbols-rounded">schedule</span>
+                        <div>
+                            <div class="stat-label">Date Range</div>
+                            <div class="stat-value" id="dateRange">--</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- TABLE -->
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th data-column="timestamp" onclick="sortTable('timestamp')" class="sortable">
+                                    <span class="material-symbols-rounded icon">schedule</span>
+                                    <span>Time</span>
+                                    <span class="sort-indicator"></span>
+                                </th>
+                                <th data-column="pump1" onclick="sortTable('pump1')" class="sortable">
+                                    <span class="material-symbols-rounded icon">power</span>
+                                    <span>P1 CMD</span>
+                                    <span class="sort-indicator"></span>
+                                </th>
+                                <th data-column="pump1_status" onclick="sortTable('pump1_status')" class="sortable">
+                                    <span class="material-symbols-rounded icon">electric_bolt</span>
+                                    <span>P1 Status</span>
+                                    <span class="sort-indicator"></span>
+                                </th>
+                                <th data-column="pump2" onclick="sortTable('pump2')" class="sortable">
+                                    <span class="material-symbols-rounded icon">power</span>
+                                    <span>P2 CMD</span>
+                                    <span class="sort-indicator"></span>
+                                </th>
+                                <th data-column="pump2_status" onclick="sortTable('pump2_status')" class="sortable">
+                                    <span class="material-symbols-rounded icon">electric_bolt</span>
+                                    <span>P2 Status</span>
+                                    <span class="sort-indicator"></span>
+                                </th>
+                                <th data-column="busy" onclick="sortTable('busy')" class="sortable">
+                                    <span class="material-symbols-rounded icon">sync</span>
+                                    <span>Inverter</span>
+                                    <span class="sort-indicator"></span>
+                                </th>
+                                <th data-column="alarm" onclick="sortTable('alarm')" class="sortable">
+                                    <span class="material-symbols-rounded icon">warning</span>
+                                    <span>Alarm</span>
+                                    <span class="sort-indicator"></span>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyBody">
+                            <!-- Data will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- PAGINATION -->
+                <div class="pagination-container" id="paginationContainer">
+                    <!-- Pagination will be rendered here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Page -->
+        <div id="page-settings" class="hidden">
+            <div class="page-header">
+                <h1 class="page-title">
+                    <span class="material-symbols-rounded">settings</span>
+                    Settings
+                </h1>
+            </div>
+            <div class="gateway-card">
+                <h3><span class="material-symbols-rounded">dns</span>API Configuration</h3>
+                <div class="info-row">
+                    <span class="info-label"><span class="material-symbols-rounded">link</span>Server:</span>
+                    <span>http://localhost:8080</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label"><span class="material-symbols-rounded">refresh</span>Auto-refresh:</span>
+                    <span>2 seconds</span>
+                </div>
+            </div>
         </div>
     </div>
 
-    <script>
-        const API_BASE = 'http://localhost:8080';
-        
-        // Load pump status
-        async function loadStatus() {
-            try {
-                const response = await fetch(`${API_BASE}/api/pump/status`);
-                const data = await response.json();
-                
-                updateStatusDisplay(data);
-                updateLastUpdateTime();
-            } catch (error) {
-                console.error('Error loading status:', error);
-            }
-        }
-        
-        // Update status display
-        function updateStatusDisplay(data) {
-            const grid = document.getElementById('statusGrid');
-            
-            grid.innerHTML = `
-                ${createPumpCard(1, data.pump1, data.pump1_status)}
-                ${createPumpCard(2, data.pump2, data.pump2_status)}
-            `;
-        }
-        
-        // Create pump card HTML
-        function createPumpCard(pumpId, command, status) {
-            const isRunning = status === 1;
-            const cmdText = command === 1 ? 'ON' : 'OFF';
-            const statusText = isRunning ? 'RUNNING' : 'STOPPED';
-            
-            return `
-                <div class="pump-card ${isRunning ? 'running' : 'stopped'}">
-                    <div class="pump-header">
-                        <div class="pump-title">Pump ${pumpId}</div>
-                        <div class="status-badge ${isRunning ? 'running' : 'stopped'}">${statusText}</div>
-                    </div>
-                    <div class="pump-info">
-                        <div class="info-row">
-                            <span class="info-label">Command:</span>
-                            <span class="info-value">${cmdText}</span>
-                        </div>
-                        <div class="info-row">
-                            <span class="info-label">Actual Status:</span>
-                            <span class="info-value">${statusText}</span>
-                        </div>
-                    </div>
-                    <div class="control-buttons">
-                        <button class="btn-on" onclick="control(${pumpId}, 1)">⚡ TURN ON</button>
-                        <button class="btn-off" onclick="control(${pumpId}, 0)">⏸️ TURN OFF</button>
-                    </div>
-                </div>
-            `;
-        }
-        
-        // Control pump
-        async function control(pumpId, state) {
-            try {
-                const response = await fetch(`${API_BASE}/api/pump/control`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({pump_id: pumpId, state: state})
-                });
-                
-                if (response.ok) {
-                    console.log(`Pump ${pumpId} ${state ? 'ON' : 'OFF'} command sent`);
-                    // Reload status after short delay
-                    setTimeout(loadStatus, 200);
-                    setTimeout(loadHistory, 300);
-                }
-            } catch (error) {
-                console.error('Error controlling pump:', error);
-                alert('Failed to send command. Please try again.');
-            }
-        }
-        
-        // Load history
-        async function loadHistory() {
-            try {
-                const response = await fetch(`${API_BASE}/api/pump/history`);
-                const data = await response.json();
-                console.log(data);
-                
-                const tbody = document.getElementById('historyBody');
-                
-                if (data.count === 0) {
-                    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No history data available</td></tr>';
-                    return;
-                }
-                
-                tbody.innerHTML = data.data.map(item => `
-                    <tr>
-                        <td class="timestamp">${formatTimestamp(item.timestamp)}</td>
-                        <td>${formatPumpState(item.pump1, item.pump1_status)}</td>
-                        <td>${formatPumpState(item.pump2, item.pump2_status)}</td>
-                    </tr>
-                `).join('');
-            } catch (error) {
-                console.error('Error loading history:', error);
-            }
-        }
-        
-        // Format pump state
-        function formatPumpState(cmd, status) {
-            const cmdText = cmd === 1 ? 'ON' : 'OFF';
-            const statusIcon = status === 1 ? '✅' : '⛔';
-            const stateClass = status === 1 ? 'state-on' : 'state-off';
-            
-            return `
-                <span class="state-indicator ${stateClass}"></span>
-                ${cmdText} ${statusIcon}
-            `;
-        }
-        
-        // Format timestamp
-        function formatTimestamp(timestamp) {
-            const date = new Date(timestamp * 1000);
-            return date.toLocaleString('en-US', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false
-            });
-        }
-        
-        // Update last update time
-        function updateLastUpdateTime() {
-            const now = new Date();
-            document.getElementById('lastUpdate').textContent = now.toLocaleTimeString();
-        }
-        
-        // Auto refresh every 2 seconds
-        setInterval(loadStatus, 2000);
-        
-        // Initial load
-        loadStatus();
-        loadHistory();
-    </script>
+    <script src="script.js"></script>
 </body>
 </html>

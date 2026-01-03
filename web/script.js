@@ -1,5 +1,5 @@
 // ============================================
-// CONSTANTS & CONFIG
+// CONSTANTS
 // ============================================
 const API = 'http://localhost:8080';
 const STATUS_TEXT = ['Unknown', 'Running', 'Stopped', 'Error'];
@@ -8,20 +8,20 @@ const BUSY_TEXT = ['Idle', 'Starting P1', 'Starting P2'];
 const BUSY_ICONS = ['check_circle', 'sync', 'sync'];
 
 // ============================================
-// HISTORY STATE MANAGEMENT
+// HISTORY STATE
 // ============================================
-let historyCache = null;           // Cache toàn bộ data
-let filteredData = [];             // Data sau khi filter/search
-let currentPage = 1;               // Current page
-let rowsPerPage = 20;              // Rows per page
-let sortColumn = 'timestamp';      // Current sort column
-let sortDirection = 'desc';        // Current sort direction
+let historyCache = null;
+let filteredData = [];
+let currentPage = 1;
+let rowsPerPage = 20;
+let sortColumn = 'timestamp';
+let sortDirection = 'desc';
 let activeFilters = {
     pump1Status: 'all',
     pump2Status: 'all',
     searchTerm: '',
-    dateFrom: null,     
-    dateTo: null        
+    dateFrom: null,
+    dateTo: null
 };
 
 // ============================================
@@ -199,32 +199,47 @@ async function loadGateway() {
 // HISTORY FUNCTIONS - MAIN LOAD
 // ============================================
 async function loadHistory() {
-    // If already cached, just re-render with current filters
-    if (historyCache) {
-        applyFiltersAndRender();
-        return;
-    }
-    
-    // Show loading state
     showHistoryLoading();
     
     try {
-        const res = await fetch(`${API}/api/pump/history`);
+        // Build API URL with date range
+        let apiUrl = `${API}/api/pump/history?limit=5000`;
+        
+        if (activeFilters.dateFrom) {
+            const fromTimestamp = Math.floor(activeFilters.dateFrom.getTime() / 1000);
+            apiUrl += `&from=${fromTimestamp}`;
+            console.log('[LOAD] From:', activeFilters.dateFrom, '→ timestamp:', fromTimestamp);
+        }
+        
+        if (activeFilters.dateTo) {
+            const toTimestamp = Math.floor(activeFilters.dateTo.getTime() / 1000);
+            apiUrl += `&to=${toTimestamp}`;
+            console.log('[LOAD] To:', activeFilters.dateTo, '→ timestamp:', toTimestamp);
+        }
+        
+        console.log('[LOAD] Fetching:', apiUrl);
+        
+        const res = await fetch(apiUrl);
         const data = await res.json();
-        console.log('History data loaded:', data);
         
-        // Cache the data
+        console.log('[LOAD] Received:', data.count, 'records');
+        
+        if (data.count > 0) {
+            const firstRecord = new Date(data.data[0].timestamp * 1000);
+            const lastRecord = new Date(data.data[data.count - 1].timestamp * 1000);
+            console.log('[LOAD] Data range:', lastRecord, '→', firstRecord);
+        }
+        
         historyCache = data;
-        filteredData = [...data.data]; // Clone array
+        filteredData = [...data.data];
+        currentPage = 1;
         
-        // Apply filters and render
-        applyFiltersAndRender();
+        applyLocalFilters();
         
     } catch (err) {
         showHistoryError(err);
     }
 }
-
 function showHistoryLoading() {
     const tbody = document.getElementById('historyBody');
     tbody.innerHTML = `
@@ -268,17 +283,22 @@ function refreshHistory() {
         pump1Status: 'all',
         pump2Status: 'all',
         searchTerm: '',
-        dateFrom: null,      
-        dateTo: null         
+        dateFrom: null,
+        dateTo: null
     };
     
     // Reset filters UI
-    document.querySelectorAll('.filter-select').forEach(select => {
-        select.value = 'all';
-    });
-    document.getElementById('searchInput').value = '';
-    document.getElementById('dateFrom').value = '';   
-    document.getElementById('dateTo').value = '';     
+    const filterP1 = document.getElementById('filterP1');
+    const filterP2 = document.getElementById('filterP2');
+    const searchInput = document.getElementById('searchInput');
+    const datetimeFrom = document.getElementById('datetimeFrom');
+    const datetimeTo = document.getElementById('datetimeTo');
+    
+    if (filterP1) filterP1.value = 'all';
+    if (filterP2) filterP2.value = 'all';
+    if (searchInput) searchInput.value = '';
+    if (datetimeFrom) datetimeFrom.value = '';
+    if (datetimeTo) datetimeTo.value = '';
     
     // Activate "All" quick filter
     document.querySelectorAll('.quick-filter-btn').forEach((btn, idx) => {
@@ -292,82 +312,45 @@ function refreshHistory() {
 // ============================================
 // FILTERING & SEARCHING
 // ============================================
-function applyFiltersAndRender() {
+function applyLocalFilters() {
     if (!historyCache) return;
     
-    // Start with all data
     let data = [...historyCache.data];
     
-    // Apply search filter
+    // Search filter
     if (activeFilters.searchTerm) {
         const term = activeFilters.searchTerm.toLowerCase();
         data = data.filter(item => {
             const timestamp = new Date(item.timestamp * 1000).toLocaleString().toLowerCase();
             const p1Status = STATUS_TEXT[item.pump1_status || 0].toLowerCase();
             const p2Status = STATUS_TEXT[item.pump2_status || 0].toLowerCase();
-            const p1Cmd = item.pump1 ? 'on' : 'off';
-            const p2Cmd = item.pump2 ? 'on' : 'off';
-            
-            return timestamp.includes(term) || 
-                   p1Status.includes(term) || 
-                   p2Status.includes(term) ||
-                   p1Cmd.includes(term) ||
-                   p2Cmd.includes(term);
+            return timestamp.includes(term) || p1Status.includes(term) || p2Status.includes(term);
         });
     }
     
-    // Apply date range filter
-    if (activeFilters.dateFrom || activeFilters.dateTo) {
-        data = data.filter(item => {
-            const itemDate = new Date(item.timestamp * 1000);
-            
-            if (activeFilters.dateFrom && itemDate < activeFilters.dateFrom) {
-                return false;
-            }
-            
-            if (activeFilters.dateTo && itemDate > activeFilters.dateTo) {
-                return false;
-            }
-            
-            return true;
-        });
-    }
-   
-    
-    // Apply pump1 status filter
+    // Status filters
     if (activeFilters.pump1Status !== 'all') {
         const statusNum = parseInt(activeFilters.pump1Status);
         data = data.filter(item => (item.pump1_status || 0) === statusNum);
     }
     
-    // Apply pump2 status filter
     if (activeFilters.pump2Status !== 'all') {
         const statusNum = parseInt(activeFilters.pump2Status);
         data = data.filter(item => (item.pump2_status || 0) === statusNum);
     }
     
-    // Apply sorting
+    // Sorting
     data.sort((a, b) => {
         let aVal = a[sortColumn] || 0;
         let bVal = b[sortColumn] || 0;
-        
-        if (sortDirection === 'asc') {
-            return aVal > bVal ? 1 : -1;
-        } else {
-            return aVal < bVal ? 1 : -1;
-        }
+        return sortDirection === 'asc' ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1);
     });
     
-    // Update filtered data
     filteredData = data;
     
-    // Reset to page 1 if current page is out of range
     const totalPages = Math.ceil(filteredData.length / rowsPerPage);
-    if (currentPage > totalPages) {
-        currentPage = 1;
-    }
+    if (currentPage > totalPages && totalPages > 0) currentPage = 1;
     
-    // Render table and pagination
     renderHistoryTable();
     renderPagination();
     updateHistoryStats();
@@ -387,123 +370,101 @@ function debounce(func, wait) {
 const handleSearchInput = debounce((value) => {
     activeFilters.searchTerm = value;
     currentPage = 1;
-    applyFiltersAndRender();
+    applyLocalFilters();  // LOCAL, không reload BE
 }, 300);
 
 function filterByStatus(pump, status) {
-    if (pump === 'pump1') {
-        activeFilters.pump1Status = status;
-    } else if (pump === 'pump2') {
-        activeFilters.pump2Status = status;
-    }
+    if (pump === 'pump1') activeFilters.pump1Status = status;
+    else if (pump === 'pump2') activeFilters.pump2Status = status;
     currentPage = 1;
-    applyFiltersAndRender();
+    applyLocalFilters();  // LOCAL, không reload BE
 }
+
+
 // ============================================
 // DATE FILTERING
 // ============================================
 function applyQuickFilter(range) {
-    // Update active button
-    document.querySelectorAll('.quick-filter-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
+    document.querySelectorAll('.quick-filter-btn').forEach(btn => btn.classList.remove('active'));
     event.currentTarget.classList.add('active');
     
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
+    const now = new Date();
     let fromDate = null;
-    let toDate = new Date();
-    toDate.setHours(23, 59, 59, 999);
+    let toDate = null;
     
     switch(range) {
         case 'all':
             fromDate = null;
             toDate = null;
             break;
+            
         case 'today':
-            fromDate = new Date(today);
+            fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+            toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
             break;
+            
         case 'yesterday':
-            fromDate = new Date(today);
-            fromDate.setDate(fromDate.getDate() - 1);
-            toDate = new Date(today);
-            toDate.setSeconds(toDate.getSeconds() - 1);
+            fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
+            toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
             break;
+            
         case 'week':
-            fromDate = new Date(today);
-            fromDate.setDate(fromDate.getDate() - 7);
+            fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7, 0, 0, 0);
+            toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
             break;
+            
         case 'month':
-            fromDate = new Date(today);
-            fromDate.setDate(fromDate.getDate() - 30);
+            fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30, 0, 0, 0);
+            toDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
             break;
     }
     
-    // Update date inputs
-    if (fromDate) {
-        document.getElementById('dateFrom').valueAsDate = fromDate;
-        activeFilters.dateFrom = fromDate;
-    } else {
-        document.getElementById('dateFrom').value = '';
-        activeFilters.dateFrom = null;
+    activeFilters.dateFrom = fromDate;
+    activeFilters.dateTo = toDate;
+    
+    // Update UI inputs
+    const datetimeFrom = document.getElementById('datetimeFrom');
+    const datetimeTo = document.getElementById('datetimeTo');
+    
+    if (datetimeFrom) {
+        datetimeFrom.value = fromDate ? toISOLocal(fromDate) : '';
     }
     
-    if (toDate) {
-        document.getElementById('dateTo').valueAsDate = toDate;
-        activeFilters.dateTo = toDate;
-    } else {
-        document.getElementById('dateTo').value = '';
-        activeFilters.dateTo = null;
+    if (datetimeTo) {
+        datetimeTo.value = toDate ? toISOLocal(toDate) : '';
     }
     
-    currentPage = 1;
-    applyFiltersAndRender();
+    console.log('[FILTER] Date range:', fromDate, '→', toDate);
+    
+    // RELOAD FROM BE
+    loadHistory();
 }
 
 function filterByDateRange() {
-    const fromInput = document.getElementById('dateFrom').value;
-    const toInput = document.getElementById('dateTo').value;
+    const fromInput = document.getElementById('datetimeFrom').value;
+    const toInput = document.getElementById('datetimeTo').value;
     
-    if (fromInput) {
-        const fromDate = new Date(fromInput);
-        fromDate.setHours(0, 0, 0, 0);
-        activeFilters.dateFrom = fromDate;
-    } else {
-        activeFilters.dateFrom = null;
-    }
+    activeFilters.dateFrom = fromInput ? new Date(fromInput) : null;
+    activeFilters.dateTo = toInput ? new Date(toInput) : null;
     
-    if (toInput) {
-        const toDate = new Date(toInput);
-        toDate.setHours(23, 59, 59, 999);
-        activeFilters.dateTo = toDate;
-    } else {
-        activeFilters.dateTo = null;
-    }
+    document.querySelectorAll('.quick-filter-btn').forEach(btn => btn.classList.remove('active'));
     
-    // Deactivate quick filter buttons
-    document.querySelectorAll('.quick-filter-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    
-    currentPage = 1;
-    applyFiltersAndRender();
+    // RELOAD FROM BE
+    loadHistory();
 }
 
 function clearDateFilter() {
-    document.getElementById('dateFrom').value = '';
-    document.getElementById('dateTo').value = '';
+    document.getElementById('datetimeFrom').value = '';
+    document.getElementById('datetimeTo').value = '';
     activeFilters.dateFrom = null;
     activeFilters.dateTo = null;
     
-    // Activate "All" button
     document.querySelectorAll('.quick-filter-btn').forEach((btn, idx) => {
         if (idx === 0) btn.classList.add('active');
         else btn.classList.remove('active');
     });
     
-    currentPage = 1;
-    applyFiltersAndRender();
+    loadHistory();
 }
 // ============================================
 // SORTING
@@ -517,7 +478,7 @@ function sortTable(column) {
         sortDirection = 'desc'; // Default to descending
     }
     
-    applyFiltersAndRender();
+    applyLocalFilters();  // LOCAL, không reload BE
 }
 
 function updateSortIndicators() {
@@ -691,8 +652,30 @@ function updateHistoryStats() {
     // Filtered records
     document.getElementById('filteredRecords').textContent = filteredData.length;
     
-    // Date range
-    if (filteredData.length > 0) {
+    // Date range - HIỂN THỊ THEO FILTER USER CHỌN (không tính từ data)
+    const dateRangeEl = document.getElementById('dateRange');
+    
+    if (activeFilters.dateFrom || activeFilters.dateTo) {
+        // User đã chọn date range → Hiển thị chính xác cái họ chọn
+        const formatDate = (date) => {
+            if (!date) return '--';
+            return `${date.getMonth() + 1}/${date.getDate()}`;
+        };
+        
+        const formatDateTime = (date) => {
+            if (!date) return '--';
+            const h = date.getHours();
+            const m = date.getMinutes().toString().padStart(2, '0');
+            return `${date.getMonth() + 1}/${date.getDate()} ${h}:${m}`;
+        };
+        
+        const from = activeFilters.dateFrom ? formatDateTime(activeFilters.dateFrom) : '--';
+        const to = activeFilters.dateTo ? formatDateTime(activeFilters.dateTo) : 'now';
+        
+        dateRangeEl.textContent = `${from} - ${to}`;
+        
+    } else if (filteredData.length > 0) {
+        // Không có filter → Hiển thị range của data
         const timestamps = filteredData.map(item => item.timestamp);
         const minDate = new Date(Math.min(...timestamps) * 1000);
         const maxDate = new Date(Math.max(...timestamps) * 1000);
@@ -701,13 +684,12 @@ function updateHistoryStats() {
             return `${date.getMonth() + 1}/${date.getDate()}`;
         };
         
-        document.getElementById('dateRange').textContent = 
-            `${formatDate(minDate)} - ${formatDate(maxDate)}`;
+        dateRangeEl.textContent = `${formatDate(minDate)} - ${formatDate(maxDate)}`;
+        
     } else {
-        document.getElementById('dateRange').textContent = '--';
+        dateRangeEl.textContent = '--';
     }
 }
-
 // ============================================
 // EXPORT CSV
 // ============================================
@@ -755,7 +737,11 @@ function exportToCSV() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 }
-
+// Helper: Convert Date to ISO local string
+function toISOLocal(date) {
+    const offset = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - offset).toISOString();
+}
 // ============================================
 // AUTO-REFRESH & INITIALIZATION
 // ============================================

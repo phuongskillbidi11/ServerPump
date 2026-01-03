@@ -120,7 +120,7 @@
             
             <div class="history-section">
                 <!-- FILTERS & CONTROLS -->
-                <div class="history-controls">
+               <div class="history-controls">
                     <!-- Row 1: Search & Quick Date Filters -->
                     <div class="control-row">
                         <!-- Search -->
@@ -146,19 +146,19 @@
                     
                     <!-- Row 2: Date Range & Status Filters -->
                     <div class="control-row">
-                        <!-- Date Range Picker -->
-                        <div class="date-range-picker">
-                            <div class="date-input-group">
+                        <!-- Date & Time Range Picker -->
+                        <div class="datetime-range-picker">
+                            <div class="datetime-input-group">
                                 <span class="material-symbols-rounded">calendar_today</span>
                                 <input 
-                                    type="date" 
-                                    id="dateFrom"
+                                    type="datetime-local" 
+                                    id="datetimeFrom"
                                     onchange="filterByDateRange()"
                                 >
                                 <span class="date-separator">to</span>
                                 <input 
-                                    type="date" 
-                                    id="dateTo"
+                                    type="datetime-local" 
+                                    id="datetimeTo"
                                     onchange="filterByDateRange()"
                                 >
                                 <button class="btn-clear-date" onclick="clearDateFilter()">
@@ -169,7 +169,7 @@
                         
                         <!-- Status Filters -->
                         <div class="filter-group">
-                            <select onchange="filterByStatus('pump1', this.value)" class="filter-select">
+                            <select onchange="filterByStatus('pump1', this.value)" class="filter-select" id="filterP1">
                                 <option value="all">All P1 Status</option>
                                 <option value="0">Unknown</option>
                                 <option value="1">Running</option>
@@ -177,7 +177,7 @@
                                 <option value="3">Error</option>
                             </select>
                             
-                            <select onchange="filterByStatus('pump2', this.value)" class="filter-select">
+                            <select onchange="filterByStatus('pump2', this.value)" class="filter-select" id="filterP2">
                                 <option value="all">All P2 Status</option>
                                 <option value="0">Unknown</option>
                                 <option value="1">Running</option>

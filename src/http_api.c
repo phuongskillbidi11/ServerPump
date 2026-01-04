@@ -94,9 +94,12 @@ char* handle_gateway_status() {
     
     static char response[1024];
     snprintf(response, sizeof(response),
-             "{\"status\":%d,\"device_id\":\"%s\",\"firmware\":\"%s\",\"last_seen\":%ld}",
-             is_online, gateway_hw_status.device_id,
-             gateway_hw_status.firmware_version, gateway_hw_status.last_seen_at);
+             "{\"status\":%d,\"is_online\":%d,\"device_id\":\"%s\",\"firmware\":\"%s\",\"last_seen\":%ld}",
+             gateway_hw_status.gateway_reported_status,  
+             is_online,                                  
+             gateway_hw_status.device_id,
+             gateway_hw_status.firmware_version, 
+             gateway_hw_status.last_seen_at);
     
     pthread_mutex_unlock(&lock);
     return strdup(response);

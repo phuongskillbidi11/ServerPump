@@ -90,18 +90,16 @@ int mqtt_message_arrived(void *context, char *topicName, int topicLen, MQTTClien
                 }
             }
             
+            int busy_updated = 0, alarm_updated = 0;
+            int new_busy = -1, new_alarm = -1;
+            
             // Parse busy (0=Idle, 1=Starting_P1, 2=Starting_P2)
             if (json_object_object_get_ex(parsed, "busy", &busy_obj)) {
                 int busy = json_object_get_int(busy_obj);
                 
                 if (busy >= 0 && busy <= 2) {
-                    pthread_mutex_lock(&lock);
-                    current_pump_status.busy = busy;
-                    current_pump_status.timestamp = time(NULL);
-                    pthread_mutex_unlock(&lock);
-                    
-                    const char *busy_str[] = {"Idle", "Starting_P1", "Starting_P2"};
-                    printf("[MQTT-SUB] Busy status updated: %s\n", busy_str[busy]);
+                    new_busy = busy;
+                    busy_updated = 1;
                 } else {
                     printf("[MQTT-SUB] Invalid busy value: %d (must be 0-2)\n", busy);
                 }
@@ -112,15 +110,21 @@ int mqtt_message_arrived(void *context, char *topicName, int topicLen, MQTTClien
                 int alarm = json_object_get_int(alarm_obj);
                 
                 if (alarm == 0 || alarm == 1) {
-                    pthread_mutex_lock(&lock);
-                    current_pump_status.alarm = alarm;
-                    current_pump_status.timestamp = time(NULL);
-                    pthread_mutex_unlock(&lock);
-                    
-                    printf("[MQTT-SUB] Alarm status: %s\n", alarm ? "ACTIVE" : "Clear");
+                    new_alarm = alarm;
+                    alarm_updated = 1;
                 } else {
                     printf("[MQTT-SUB] Invalid alarm value: %d (must be 0 or 1)\n", alarm);
                 }
+            }
+            
+            // Update system status if busy or alarm changed
+            if (busy_updated || alarm_updated) {
+                pthread_mutex_lock(&lock);
+                if (!busy_updated) new_busy = current_pump_status.busy;
+                if (!alarm_updated) new_alarm = current_pump_status.alarm;
+                pthread_mutex_unlock(&lock);
+                
+                update_system_status(new_busy, new_alarm);
             }
             
             json_object_put(parsed);

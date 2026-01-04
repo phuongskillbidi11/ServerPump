@@ -131,6 +131,7 @@ int db_get_history(char *output, int max_size, int limit) {
     sqlite3_bind_int(stmt, 1, limit);
     
     char temp[102400];
+    temp[0] = '\0';  // CRITICAL: Clear buffer to prevent stale data
     char *ptr = temp;
     int remaining = sizeof(temp);
     int count = 0;
@@ -207,6 +208,7 @@ int db_get_history_filtered(char *output, int max_size, int limit, time_t from, 
     
     // Build response
     char temp[409600];
+    temp[0] = '\0';  //  Clear buffer to prevent stale data
     char *ptr = temp;
     int remaining = sizeof(temp);
     int count = 0;
@@ -228,7 +230,7 @@ int db_get_history_filtered(char *output, int max_size, int limit, time_t from, 
     sqlite3_finalize(stmt);
     snprintf(output, max_size, "{\"count\":%d,\"data\":[%s]}", count, temp);
     
-    printf("[DB-FILTER] ✅ Retrieved %d records\n", count);
+    printf("[DB-FILTER]  Retrieved %d records\n", count);
     return 0;
 }
 

@@ -61,5 +61,6 @@ void add_pump_history(PumpStatus status);
 void update_pump_status(int pump_id, int state);
 void update_pump_feedback(int pump_id, int status);
 void update_gateway_heartbeat(const char *device_id, const char *firmware, int status);
+void update_system_status(int busy, int alarm);
 
 #endif
